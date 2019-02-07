@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # coding: utf-8
-# Copyright 2016 Abram Hindle, https://github.com/tywtyw2002, and https://github.com/treedust
+# Copyright 2016 Abram Hindle, https://github.com/tywtyw2002, and https://github.com/treedust, Xinyi Zhuang
 # 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ import sys
 import socket
 import re
 # you may use urllib to encode data appropriately
-import urllib.parse
+import urllib.parse as u
 
 def help():
     print("httpclient.py [GET/POST] [URL]\n")
@@ -33,7 +33,14 @@ class HTTPResponse(object):
         self.body = body
 
 class HTTPClient(object):
-    #def get_host_port(self,url):
+    def get_host_port(self,url):
+        host = u.urlparse(url).hostname
+        port = u.urlparse(url).port
+        
+        if port is None:
+            port = 80
+        
+        return host, port
 
     def connect(self, host, port):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -41,13 +48,16 @@ class HTTPClient(object):
         return None
 
     def get_code(self, data):
-        return None
+        status_code = int(data.split(" ")[1])
+        
+        return status_code
 
     def get_headers(self,data):
         return None
 
     def get_body(self, data):
-        return None
+        body = data.split("\r\n\r\n")[1]
+        return body
     
     def sendall(self, data):
         self.socket.sendall(data.encode('utf-8'))
@@ -68,14 +78,49 @@ class HTTPClient(object):
         return buffer.decode('utf-8')
 
     def GET(self, url, args=None):
-        code = 500
-        body = ""
-        return HTTPResponse(code, body)
+        useragent = "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:64.0) Gecko/20100101 Firefox/64.0"
+        
+        host, port = self.get_host_port(url)
+        path = u.urlparse(url).path
+        if len(path) == 0:
+            path = "/"
+        try:
+            self.connect(host, port)
+            request = ('GET %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: %s\r\nConnection: close\r\n\r\n' %(path, host, useragent))
+            self.sendall(request)
+            data = self.recvall(self.socket)
+            code = self.get_code(data)
+            body = self.get_body(data)
+            print(body)
+            return HTTPResponse(code, body)
+        except Exception as e:
+            resp = HTTPResponse(404, e)
+            print(resp.body)
+            return resp
 
     def POST(self, url, args=None):
-        code = 500
-        body = ""
-        return HTTPResponse(code, body)
+        useragent = "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:64.0) Gecko/20100101 Firefox/64.0"
+        
+        host, port = self.get_host_port(url)
+        path = u.urlparse(url).path
+        if len(path) == 0:
+            path = "/"
+        try:
+            self.connect(host, port)
+            variables = ''
+            if args != None:
+                variables = u.urlencode(args)
+            request = ('POST %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: %s\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: %s\r\nConnection: close\r\n\r\n%s' %(path, host, useragent, len(variables), variables ))
+            self.sendall(request)
+            data = self.recvall(self.socket)
+            code = self.get_code(data)
+            body = self.get_body(data)
+            print(body)            
+            return HTTPResponse(code, body)
+        except Exception as e:
+            resp = HTTPResponse(404, e)
+            print(resp.body)
+            return resp
 
     def command(self, url, command="GET", args=None):
         if (command == "POST"):
